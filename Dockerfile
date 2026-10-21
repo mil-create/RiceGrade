@@ -1,17 +1,13 @@
-# Use an official Python runtime as a parent image
 FROM python:3.10-slim
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy the backend directory
-COPY backend/ ./backend/
+# Copy backend contents to /app so "main:app" resolves
+COPY backend/ .
 
-# Install dependencies
-RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port 7860 (Hugging Face Spaces default port)
+# Hugging Face Spaces default port
 EXPOSE 7860
 
-# Run the application
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]

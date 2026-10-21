@@ -1,0 +1,11 @@
+build/
+.dart_tool/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+*.iml
+local.properties
+.claude/settings.local.json
+*.apk

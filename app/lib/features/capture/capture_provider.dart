@@ -1,16 +1,21 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../services/services.dart';
-import '../../features/results/results_provider.dart';
+import '../history/history_provider.dart';
+import '../results/results_provider.dart';
 
 class CaptureState {
   final File? image;
   final bool isLoading;
   final String? error;
   final bool permissionDenied;
-  final bool showResults; // Flag to indicate we should show results screen
+  final bool
+      showResults; // set after a successful analysis to trigger navigation
 
   const CaptureState({
     this.image,
@@ -26,11 +31,13 @@ class CaptureState {
     String? error,
     bool? permissionDenied,
     bool? showResults,
+    bool clearImage = false,
+    bool clearError = false,
   }) {
     return CaptureState(
-      image: image ?? this.image,
+      image: clearImage ? null : (image ?? this.image),
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       permissionDenied: permissionDenied ?? this.permissionDenied,
       showResults: showResults ?? this.showResults,
     );
@@ -38,70 +45,78 @@ class CaptureState {
 }
 
 class CaptureNotifier extends StateNotifier<CaptureState> {
-  final Ref _ref;
-
   CaptureNotifier(this._ref) : super(const CaptureState());
 
+  final Ref _ref;
+
   Future<void> pickImage(ImageSource source) async {
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      permissionDenied: false,
+      showResults: false,
+    );
     try {
-      state = state.copyWith(
-          isLoading: true,
-          error: null,
-          permissionDenied: false,
-          showResults: false);
-      final pickedFile = await ImagePicker().pickImage(source: source);
-      if (pickedFile == null) {
-        // User cancelled
-        state = state.copyWith(isLoading: false);
+      // Downscale phone photos so uploads stay under the backend's 5 MB limit.
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
+      if (picked == null) {
+        state = state.copyWith(isLoading: false); // user cancelled
         return;
       }
-      state = state.copyWith(image: File(pickedFile.path), isLoading: false);
+      state = state.copyWith(image: File(picked.path), isLoading: false);
+    } on PlatformException catch (e) {
+      final denied = e.code.contains('access_denied');
+      state = state.copyWith(
+        isLoading: false,
+        permissionDenied: denied,
+        error: denied ? 'Permission denied' : (e.message ?? e.code),
+      );
     } catch (e) {
-      if (e is PlatformException && e.code == 'access_denied') {
-        state = state.copyWith(
-          isLoading: false,
-          permissionDenied: true,
-          error: 'Permission denied',
-          showResults: false,
-        );
-      } else {
-        state = state.copyWith(
-          isLoading: false,
-          error: e.toString(),
-          showResults: false,
-        );
-      }
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   Future<void> analyzeImage() async {
-    if (state.image == null) return;
-    state = state.copyWith(isLoading: true, error: null, showResults: false);
+    final image = state.image;
+    if (image == null) return;
+    state =
+        state.copyWith(isLoading: true, clearError: true, showResults: false);
     try {
-      final apiService = ApiService();
-      final result = await apiService.analyzeImage(state.image!.path);
-      // Update the results provider
+      final result = await _ref.read(analyzerProvider).analyze(image.path);
       _ref.read(resultsProvider.notifier).setResults(result.toJson());
-      // Update the image data provider
-      _ref
-          .read(imageDataProvider.notifier)
-          .update((state) => result.annotatedImageBase64);
-      // Reset the capture state (clear the image) and set showResults to true
-      state = state.copyWith(isLoading: false, image: null, showResults: true);
-    } catch (e) {
+      _ref.read(imageDataProvider.notifier).state = result.annotatedImageBase64;
+      await _saveToHistory(image.path, result);
       state = state.copyWith(
-          isLoading: false, error: e.toString(), showResults: false);
+        isLoading: false,
+        clearImage: true,
+        showResults: true,
+      );
+    } on ApiException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
-  void reset() {
-    state = const CaptureState();
+  /// A failed save must not hide a successful analysis.
+  Future<void> _saveToHistory(String path, AnalysisResult result) async {
+    _ref.read(currentHistoryEntryProvider.notifier).state = null;
+    try {
+      _ref.read(currentHistoryEntryProvider.notifier).state =
+          await _ref.read(historyProvider.notifier).add(path, result);
+    } catch (e) {
+      debugPrint('Could not save to history: $e');
+    }
   }
 
-  // Call this to reset the showResults flag after navigation
-  void clearShowResults() {
-    state = state.copyWith(showResults: false);
-  }
+  void reset() => state = const CaptureState();
+
+  /// Call after navigating so we don't navigate again.
+  void clearShowResults() => state = state.copyWith(showResults: false);
 }
 
 final captureProvider =

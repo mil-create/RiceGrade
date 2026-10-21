@@ -3,11 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'app_shell.dart';
 import '../features/capture/capture_screen.dart';
 import '../features/results/results_screen.dart';
+import '../features/history/compare_screen.dart';
 import '../features/history/history_screen.dart';
 
 // Placeholder home page - replace with actual implementation later
 class HomePage extends StatelessWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +56,14 @@ final GoRouter appRouter = GoRouter(
           ],
         ),
       ],
+    ),
+    // Full screen, outside the shell, so it gets a back button.
+    GoRoute(
+      path: '/compare',
+      builder: (context, state) => CompareScreen(
+        firstId: int.tryParse(state.uri.queryParameters['a'] ?? ''),
+        secondId: int.tryParse(state.uri.queryParameters['b'] ?? ''),
+      ),
     ),
   ],
 );

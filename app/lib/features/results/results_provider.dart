@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../services/services.dart';
+
 class ResultsState {
   final bool isLoading;
   final String? error;
@@ -18,12 +20,15 @@ class ResultsState {
     String? error,
     Map<String, dynamic>? analysisResults,
     bool? hasResults,
+    bool clearError = false,
+    bool clearResults = false,
   }) {
     return ResultsState(
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
-      analysisResults: analysisResults ?? this.analysisResults,
-      hasResults: hasResults ?? this.hasResults,
+      error: clearError ? null : (error ?? this.error),
+      analysisResults:
+          clearResults ? null : (analysisResults ?? this.analysisResults),
+      hasResults: clearResults ? false : (hasResults ?? this.hasResults),
     );
   }
 }
@@ -34,19 +39,19 @@ class ResultsNotifier extends StateNotifier<ResultsState> {
   void setResults(Map<String, dynamic> results) {
     state = state.copyWith(
       isLoading: false,
-      error: null,
+      clearError: true,
       analysisResults: results,
       hasResults: true,
     );
   }
 
   void setLoading() {
-    state = state.copyWith(isLoading: true, error: null, analysisResults: null);
+    state =
+        state.copyWith(isLoading: true, clearError: true, clearResults: true);
   }
 
   void setError(String error) {
-    state =
-        state.copyWith(isLoading: false, error: error, analysisResults: null);
+    state = state.copyWith(isLoading: false, error: error, clearResults: true);
   }
 
   void clear() {
@@ -59,5 +64,8 @@ final resultsProvider =
   return ResultsNotifier();
 });
 
-// Provider to hold the base64 image data for display
+// Holds the base64 annotated image for display
 final imageDataProvider = StateProvider<String?>((ref) => null);
+
+// History entry behind the shown results; null if it wasn't saved.
+final currentHistoryEntryProvider = StateProvider<HistoryEntry?>((ref) => null);

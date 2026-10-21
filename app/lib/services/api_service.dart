@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Response model for the rice analysis API
 class AnalysisResult {
@@ -30,16 +31,14 @@ class AnalysisResult {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'whole_count': wholeCount,
-      'broken_count': brokenCount,
-      'broken_percent': brokenPercent,
-      'avg_length_breadth_ratio': avgLengthBreadthRatio,
-      'grade': grade,
-      'annotated_image_base64': annotatedImageBase64,
-    };
-  }
+  Map<String, dynamic> toJson() => {
+        'whole_count': wholeCount,
+        'broken_count': brokenCount,
+        'broken_percent': brokenPercent,
+        'avg_length_breadth_ratio': avgLengthBreadthRatio,
+        'grade': grade,
+        'annotated_image_base64': annotatedImageBase64,
+      };
 }
 
 /// Custom exception for API errors
@@ -56,8 +55,11 @@ class ApiException implements Exception {
 
 /// API service for communicating with the RiceGrade backend
 class ApiService {
-  final Dio _dio;
+  // With `adb reverse tcp:8000 tcp:8000` this reaches the laptop from the tablet.
+  // Replace with the Hugging Face Space URL when deployed.
   static const String _defaultBaseUrl = 'http://127.0.0.1:8000';
+
+  final Dio _dio;
 
   ApiService({String? baseUrl})
       : _dio = Dio(BaseOptions(
@@ -65,59 +67,36 @@ class ApiService {
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 30),
           sendTimeout: const Duration(seconds: 30),
-          headers: {'Content-Type': 'multipart/form-data'},
         )) {
-    // Add logging interceptor in debug mode
-    _dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-      error: true,
-    ));
-  }
-
-  /// Analyze a rice grain image
-  /// Returns [AnalysisResult] on success, throws [ApiException] on failure
-  Future<AnalysisResult> analyzeImage(String imagePath) async {
-    try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(imagePath),
-      });
-
-      final response = await _dio.post('/analyze', data: formData);
-
-      if (response.statusCode == 200) {
-        return AnalysisResult.fromJson(response.data as Map<String, dynamic>);
-      } else {
-        throw ApiException(
-          'Server returned ${response.statusCode}: ${response.data}',
-          statusCode: response.statusCode,
-        );
-      }
-    } on DioException catch (e) {
-      throw _handleDioError(e);
-    } catch (e) {
-      throw ApiException('Unexpected error: $e');
+    // Never log bodies: the response contains a large base64 image.
+    if (kDebugMode) {
+      _dio.interceptors.add(LogInterceptor(
+        requestBody: false,
+        responseBody: false,
+        error: true,
+      ));
     }
   }
 
-  /// Analyze image from bytes (useful for in-memory images)
+  /// Analyze a rice grain image from a file path.
+  Future<AnalysisResult> analyzeImage(String imagePath) async {
+    return _post(FormData.fromMap({
+      'file': await MultipartFile.fromFile(imagePath),
+    }));
+  }
+
+  /// Analyze an in-memory image.
   Future<AnalysisResult> analyzeImageBytes(
       List<int> bytes, String filename) async {
+    return _post(FormData.fromMap({
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    }));
+  }
+
+  Future<AnalysisResult> _post(FormData formData) async {
     try {
-      final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(bytes, filename: filename),
-      });
-
       final response = await _dio.post('/analyze', data: formData);
-
-      if (response.statusCode == 200) {
-        return AnalysisResult.fromJson(response.data as Map<String, dynamic>);
-      } else {
-        throw ApiException(
-          'Server returned ${response.statusCode}: ${response.data}',
-          statusCode: response.statusCode,
-        );
-      }
+      return AnalysisResult.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _handleDioError(e);
     } catch (e) {
@@ -136,17 +115,11 @@ class ApiService {
         return ApiException(
             'Could not connect to the server. Please check if the backend is running at ${_dio.options.baseUrl}.');
       case DioExceptionType.badResponse:
-        final statusCode = e.response?.statusCode;
-        String message = 'Request failed';
-        if (e.response?.data != null) {
-          final data = e.response!.data;
-          if (data is Map && data.containsKey('detail')) {
-            message = data['detail'].toString();
-          } else {
-            message = data.toString();
-          }
-        }
-        return ApiException(message, statusCode: statusCode);
+        final data = e.response?.data;
+        final message = (data is Map && data.containsKey('detail'))
+            ? data['detail'].toString()
+            : (data?.toString() ?? 'Request failed');
+        return ApiException(message, statusCode: e.response?.statusCode);
       case DioExceptionType.cancel:
         return ApiException('Request was cancelled');
       default:
@@ -154,17 +127,10 @@ class ApiService {
     }
   }
 
-  /// Update the base URL (useful when deploying to Hugging Face Spaces)
+  /// Update the base URL (e.g. for the Hugging Face Space)
   void setBaseUrl(String url) {
     _dio.options.baseUrl = url;
   }
 
-  /// Close the Dio client
-  void close() {
-    _dio.close();
-  }
+  void close() => _dio.close();
 }
-
-/// Provider for the API service
-// This will be added to a providers file or main.dart
-// final apiServiceProvider = Provider<ApiService>((ref) => ApiService());

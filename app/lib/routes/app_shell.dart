@@ -1,86 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-class HomePage extends StatelessWidget {
-  const HomePage({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Home Page'));
-  }
-}
-
 class AppShell extends StatelessWidget {
-  const AppShell({Key? key, required this.navigationShell}) : super(key: key);
+  const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
+  static const _items = [
+    (Icons.home, 'Home'),
+    (Icons.camera_alt, 'Capture'),
+    (Icons.analytics, 'Results'),
+    (Icons.history, 'History'),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = navigationShell.currentIndex;
-    // Determine if we are on a tablet (width >= 600) or phone
+    final index = navigationShell.currentIndex;
     final isTablet = MediaQuery.of(context).size.width >= 600;
+    void onSelect(int i) => navigationShell.goBranch(i);
 
     return Scaffold(
       body: Row(
         children: [
           if (isTablet)
             NavigationRail(
-              selectedIndex: selectedIndex,
-              onDestinationSelected: (value) {
-                navigationShell.goBranch(value);
-              },
+              selectedIndex: index,
+              onDestinationSelected: onSelect,
               labelType: NavigationRailLabelType.all,
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.home),
-                  label: Text('Home'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.camera_alt),
-                  label: Text('Capture'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.analytics),
-                  label: Text('Results'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.history),
-                  label: Text('History'),
-                ),
+              destinations: [
+                for (final (icon, label) in _items)
+                  NavigationRailDestination(
+                      icon: Icon(icon), label: Text(label)),
               ],
             ),
-          Expanded(
-            child: navigationShell,
-          ),
+          Expanded(child: navigationShell),
         ],
       ),
-      bottomNavigationBar: !isTablet
-          ? BottomNavigationBar(
-              currentIndex: selectedIndex,
-              onTap: (value) {
-                navigationShell.goBranch(value);
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.camera_alt),
-                  label: 'Capture',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.analytics),
-                  label: 'Results',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.history),
-                  label: 'History',
-                ),
+      bottomNavigationBar: isTablet
+          ? null
+          : BottomNavigationBar(
+              type: BottomNavigationBarType.fixed,
+              currentIndex: index,
+              onTap: onSelect,
+              items: [
+                for (final (icon, label) in _items)
+                  BottomNavigationBarItem(icon: Icon(icon), label: label),
               ],
-            )
-          : null,
+            ),
     );
   }
 }

@@ -1,3 +1,12 @@
+---
+title: RiceGrade Backend
+emoji: 🌾
+colorFrom: yellow
+colorTo: green
+sdk: docker
+app_port: 7860
+---
+
 # RiceGrade Backend
 
 This Hugging Face Space hosts the backend API for the RiceGrade application, which analyzes rice grain images to determine whole vs broken grains and assign a grade.
